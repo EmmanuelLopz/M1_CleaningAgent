@@ -1,8 +1,9 @@
-
+# Code to represent a cleaning automata in a MxN space
+# Code by Eduardo Mora - A01799440
+# Last Modification: 11/11/2025
 
 import mesa
 import numpy as np
-import matplotlib.pyplot as plt
 from mesa.space import MultiGrid
 from mesa.datacollection import DataCollector
 
