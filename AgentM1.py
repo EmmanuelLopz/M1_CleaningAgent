@@ -7,52 +7,52 @@ import numpy as np
 from mesa.space import MultiGrid
 from mesa.datacollection import DataCollector
 
-class CleaningAgent(mesa.Agent):
+class CleaningAgent(mesa.Agent): # Define the cleaning agent
     def __init__(self, model):
         super().__init__(model)
         self.movements = 0
 
-    def step(self):
+    def step(self): # Agent's behavior per step
         x, y = self.pos
         cellContent = self.model.dirtyGrid[x][y]
 
-        if cellContent == 1:
+        if cellContent == 1: # If the cell is dirty, clean it
             self.model.dirtyGrid[x][y] = 0
-        else:
+        else: # If the cell is clean, move to a random neighboring cell
             neighbors = self.model.grid.get_neighborhood(
                 pos=self.pos,
                 moore=True,
                 include_center=False
             )
-            if neighbors:
+            if neighbors: # Check if there are valid neighbors
                 newPos = self.random.choice(neighbors)
                 self.model.grid.move_agent(self, newPos)
                 self.movements += 1
 
-class RoomToClean(mesa.Model):
+class RoomToClean(mesa.Model): # Define the cleaning model
     def __init__(self, m, n, numAgent, dirtyPercentage, maxTime):
         super().__init__()
         self.numAgent = numAgent
         self.maxRounds = maxTime
         self.actualWeight = 0
 
-        self.grid = MultiGrid(m, n, torus=False)
+        self.grid = MultiGrid(m, n, torus=False) # Create a grid for the environment
         self.dirtyGrid = np.where(np.random.rand(m, n) < dirtyPercentage, 1, 0)
 
-        for _ in range(self.numAgent):
+        for _ in range(self.numAgent): # Place agents at position (1,1)
             agent = CleaningAgent(self)
             self.grid.place_agent(agent, pos=(1, 1))
 
-        self.datacollector = DataCollector(
+        self.datacollector = DataCollector( # Data collector to track model and agent data
             model_reporters={"DirtyCells": lambda m: 1.0 - np.mean(m.dirtyGrid)},
             agent_reporters={"Movements": lambda a: a.movements}
         )
 
-    def step(self):
+    def step(self): # Define the model's step behavior
         self.datacollector.collect(self)
         if self.actualWeight >= self.maxRounds or (1.0 - np.mean(self.dirtyGrid)) == 1.0:
             self.running = False
-        else:
+        else: 
             self.agents.shuffle_do("step")
             self.actualWeight += 1
 
