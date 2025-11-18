@@ -1,5 +1,5 @@
 # Code to represent a cleaning automata in a MxN space
-# Code by Eduardo Mora - A01799440
+# Code by Eduardo Mora - A01799440 and Emmanuel Lopez - A01666331
 # Last Modification: 11/11/2025
 
 import mesa
@@ -127,16 +127,12 @@ class CleaningAgent(mesa.Agent):
                 neighbor.messages_received[self.unique_id] = self.messages_to_send[neighbor.unique_id]
     
     def select_best_action(self):
-        """Select best action based on Max-Plus algorithm"""
         best_action = None
         best_value = float('-inf')
         best_target = None
         
         for action in self.action_space:
-            # Compute total value for this action
             utility = self.compute_local_utility(action)
-            
-            # Sum messages from all neighbors
             message_sum = 0.0
             for neighbor_messages in self.messages_received.values():
                 if action in neighbor_messages:
@@ -156,20 +152,15 @@ class CleaningAgent(mesa.Agent):
         return best_action, best_target
     
     def execute_action(self):
-        """Execute the selected action"""
         x, y = self.pos
-        
-        # If current cell is dirty, clean it first
+
         if self.model.dirtyGrid[x][y] == 1:
             self.model.dirtyGrid[x][y] = 0
             return
-        
-        # Execute the planned action
+
         if self.current_action == 'stay':
-            # Agent stays in current position
             pass
         elif self.target_pos and self.target_pos != self.pos:
-            # Move to target position
             self.model.grid.move_agent(self, self.target_pos)
             self.movements += 1
     
@@ -179,7 +170,7 @@ class CleaningAgent(mesa.Agent):
         # The actual coordination happens in the model's step method
         pass
 
-class RoomToClean(mesa.Model): # Define the cleaning model with Max-Plus coordination
+class RoomToClean(mesa.Model):
     def __init__(self, m, n, numAgent, num_dirty_cells, maxTime, coordination_distance=5, max_plus_iterations=10):
         super().__init__()
         self.numAgent = numAgent
@@ -188,12 +179,10 @@ class RoomToClean(mesa.Model): # Define the cleaning model with Max-Plus coordin
         self.coordination_distance = coordination_distance
         self.max_plus_iterations = max_plus_iterations
 
-        self.grid = MultiGrid(m, n, torus=False) # Create a grid for the environment
+        self.grid = MultiGrid(m, n, torus=False)
         
-        # Initialize clean grid
         self.dirtyGrid = np.zeros((m, n), dtype=int)
         
-        # Randomly select num_dirty_cells positions to be dirty
         total_cells = m * n
         dirty_indices = np.random.choice(total_cells, size=num_dirty_cells, replace=False)
         for idx in dirty_indices:
@@ -201,16 +190,14 @@ class RoomToClean(mesa.Model): # Define the cleaning model with Max-Plus coordin
             y = idx % n
             self.dirtyGrid[x][y] = 1
         
-        # Get all clean cell positions for agent placement
         clean_positions = [(x, y) for x in range(m) for y in range(n) if self.dirtyGrid[x][y] == 0]
         
-        # Place agents at random clean positions
         agent_positions = self.random.sample(clean_positions, min(numAgent, len(clean_positions)))
         for pos in agent_positions:
             agent = CleaningAgent(self, coordination_distance=coordination_distance)
             self.grid.place_agent(agent, pos=pos)
 
-        self.datacollector = DataCollector( # Data collector to track model and agent data
+        self.datacollector = DataCollector(
             model_reporters={
                 "CleanedCells": lambda m: np.sum(m.dirtyGrid == 0),
                 "DirtyCells": lambda m: np.sum(m.dirtyGrid == 1),
@@ -222,40 +209,31 @@ class RoomToClean(mesa.Model): # Define the cleaning model with Max-Plus coordin
             }
         )
 
-    def step(self): # Define the model's step behavior with Max-Plus coordination
+    def step(self):
         self.datacollector.collect(self)
         
-        # Check termination conditions
         if self.actualWeight >= self.maxRounds or np.sum(self.dirtyGrid) == 0:
             self.running = False
             return
         
-        # Max-Plus Coordination Cycle
-        # Phase 1: Find neighbors for all agents
         for agent in self.agents:
             agent.find_neighbors()
-        
-        # Phase 2: Perform Max-Plus message passing iterations
+
         for iteration in range(self.max_plus_iterations):
-            # All agents compute messages to send
             for agent in self.agents:
                 agent.max_plus_iteration()
-            
-            # All agents send their messages
+    
             for agent in self.agents:
                 agent.send_messages()
-        
-        # Phase 3: Select best actions based on converged messages
+
         for agent in self.agents:
             agent.select_best_action()
-        
-        # Phase 4: Execute actions (in random order to avoid bias)
+
         agent_list = list(self.agents)
         self.random.shuffle(agent_list)
         for agent in agent_list:
             agent.execute_action()
-        
-        # Clear messages for next iteration
+
         for agent in self.agents:
             agent.messages_received = {}
             agent.messages_to_send = {}
@@ -263,14 +241,12 @@ class RoomToClean(mesa.Model): # Define the cleaning model with Max-Plus coordin
         self.actualWeight += 1
 
 if __name__ == "__main__":
-    # Problem parameters as specified
-    m, n = 20, 30  # 20x30 grid (600 cells)
-    num_dirty_cells = 100  # Exactly 100 dirty cells
-    maxTime = 500  # Maximum 500 time steps
-    coordination_distance = 10  # Manhattan distance for coordination graph edges
-    max_plus_iterations = 10  # Number of Max-Plus message passing iterations per step
-    
-    # Test with different numbers of robots: N ∈ {1, 2, 4, 8, 16}
+    m, n = 20, 30
+    num_dirty_cells = 100
+    maxTime = 500
+    coordination_distance = 10
+    max_plus_iterations = 10
+
     robot_counts = [1, 2, 4, 8, 16]
     
     print("=" * 80)
@@ -290,7 +266,6 @@ if __name__ == "__main__":
         print(f"EXPERIMENT: {numAgent} Robot{'s' if numAgent > 1 else ''}")
         print(f"{'='*80}")
         
-        # Run simulation
         model = RoomToClean(
             m=m, 
             n=n, 
@@ -310,7 +285,6 @@ if __name__ == "__main__":
         finalCleanedCells = np.sum(model.dirtyGrid == 0)
         finalPercentageCleaned = (1.0 - np.mean(model.dirtyGrid)) * 100
         
-        # Get agent movement statistics
         dataAgent = model.datacollector.get_agent_vars_dataframe()
         if requiredTime > 0:
             last_step_index = requiredTime - 1
@@ -318,10 +292,8 @@ if __name__ == "__main__":
         else:
             finalMovements = 0
         
-        # Success criteria: all 100 dirty cells cleaned within 500 steps
         success = finalDirtyCells == 0 and requiredTime <= maxTime
         
-        # Print results
         print(f"\n{'─'*80}")
         print(f"RESULTS:")
         print(f"{'─'*80}")
@@ -334,7 +306,6 @@ if __name__ == "__main__":
         print(f"Efficiency (Cells/Movement): {(finalCleanedCells - (m*n - num_dirty_cells))/max(finalMovements, 1):.2f}")
         print(f"{'─'*80}")
         
-        # Store results
         results.append({
             'robots': numAgent,
             'time_steps': requiredTime,
@@ -346,7 +317,6 @@ if __name__ == "__main__":
             'efficiency': (finalCleanedCells - (m*n - num_dirty_cells))/max(finalMovements, 1)
         })
     
-    # Summary table
     print(f"\n{'='*80}")
     print("SUMMARY OF ALL EXPERIMENTS")
     print(f"{'='*80}")
